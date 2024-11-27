@@ -4,9 +4,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.inventory.ItemStack;
 
-import java.lang.reflect.Constructor;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
+import java.lang.reflect.*;
 import java.util.logging.Level;
 
 public class ReflectionUtil {
@@ -32,31 +30,30 @@ public class ReflectionUtil {
 
     private static final String VERSION;
 
-    private static final Class[] NO_ARGUMENTS = new Class[0];
-
     static {
         String path = Bukkit.getServer().getClass().getPackage().getName();
         VERSION = path.substring(path.lastIndexOf('.') + 1);
 
         try {
+            // NMS クラスのロード
             nmsItemBoneMeal = getNmsClass("net.minecraft.world.item", "ItemBoneMeal");
             nmsItemStack = getNmsClass("net.minecraft.world.item", "ItemStack");
             nmsWorld = getNmsClass("net.minecraft.world.level", "World");
             nmsBlockPosition = getNmsClass("net.minecraft.core", "BlockPosition");
             nmsEnumDirection = getNmsClass("net.minecraft.core", "EnumDirection");
 
+            // CraftBukkit クラスのロード
             craftItemStack = getCraftBukkitClass("inventory.CraftItemStack");
             craftWorld = getCraftBukkitClass("CraftWorld");
 
+            // コンストラクタとメソッドのロード
             nmsBlockPositionConstructor = nmsBlockPosition.getConstructor(int.class, int.class, int.class);
-
-            nmsItemBoneMealApply = nmsItemBoneMeal.getMethod("a", nmsItemStack, nmsWorld, nmsBlockPosition);
-            nmsItemBoneMealUnderwaterApply = nmsItemBoneMeal.getMethod("a", nmsItemStack, nmsWorld, nmsBlockPosition, nmsEnumDirection);
+            nmsItemBoneMealApply = findMethod(nmsItemBoneMeal, "a", nmsItemStack, nmsWorld, nmsBlockPosition);
+            nmsItemBoneMealUnderwaterApply = findMethod(nmsItemBoneMeal, "a", nmsItemStack, nmsWorld, nmsBlockPosition, nmsEnumDirection);
             craftItemStackAsNmsCopy = craftItemStack.getMethod("asNMSCopy", ItemStack.class);
-            craftWorldGetHandle = craftWorld.getMethod("getHandle", NO_ARGUMENTS);
+            craftWorldGetHandle = craftWorld.getMethod("getHandle");
         } catch (Exception e) {
-            SneakGrow.log.log(Level.SEVERE,
-                    "Error loading NMS Classes, are you using the right version?", e);
+            SneakGrow.log.log(Level.SEVERE, "Error loading NMS Classes, are you using the right version?", e);
         }
     }
 
@@ -64,12 +61,22 @@ public class ReflectionUtil {
         try {
             return Class.forName(packagePath + "." + name);
         } catch (ClassNotFoundException e) {
+            // バックアップとしてバージョン付きパスを試す
             return Class.forName(NMS_NAMESPACE + "." + VERSION + "." + name);
         }
     }
 
     public static Class<?> getCraftBukkitClass(String name) throws ClassNotFoundException {
         return Class.forName(CRAFTBUKKIT_NAMESPACE + "." + VERSION + "." + name);
+    }
+
+    public static Method findMethod(Class<?> clazz, String name, Class<?>... parameterTypes) throws NoSuchMethodException {
+        for (Method method : clazz.getMethods()) {
+            if (method.getName().equals(name) && ParameterUtils.parametersMatch(method.getParameterTypes(), parameterTypes)) {
+                return method;
+            }
+        }
+        throw new NoSuchMethodException("Method " + name + " not found in class " + clazz.getName());
     }
 
     public static Object itemStackAsNmsCopy(ItemStack itemStack) {
@@ -109,5 +116,5 @@ public class ReflectionUtil {
             SneakGrow.log.log(Level.SEVERE, "Error applying bone meal!", e);
         }
     }
-
 }
+
